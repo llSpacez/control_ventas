@@ -12,11 +12,11 @@ import { Role } from '../entities/role.entity';
 
 @Module({
   imports: [
-    PassportModule,
+    PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       useFactory: (configService: ConfigService) => ({
-        secret: configService.get('JWT_SECRET'),
-        signOptions: { expiresIn: configService.get('JWT_EXPIRES_IN') },
+        secret: configService.get('JWT_SECRET') || 'se',
+        signOptions: { expiresIn: configService.get('JWT_EXPIRES_IN') || '24h' },
       }),
       inject: [ConfigService],
     }),
@@ -24,6 +24,6 @@ import { Role } from '../entities/role.entity';
   ],
   providers: [AuthService, LocalStrategy, JwtStrategy],
   controllers: [AuthController],
-  exports: [AuthService],
+  exports: [AuthService, PassportModule],
 })
 export class AuthModule {}

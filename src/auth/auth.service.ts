@@ -30,36 +30,43 @@ export class AuthService {
     return null;
   }
 
-  async login(loginDto: LoginDto) {
-    const user = await this.validateUser(loginDto.username, loginDto.password);
-    if (!user) {
-      throw new UnauthorizedException('Credenciales inválidas');
-    }
-
-    // Actualizar último login
-    await this.userRepository.update(user.id, { lastLogin: new Date() });
-
-    const payload = { 
-      sub: user.id, 
-      username: user.username, 
-      role: user.role.name 
-    };
-
-    return {
-      success: true,
-      message: 'Login exitoso',
-      data: {
-        access_token: this.jwtService.sign(payload),
-        user: {
-          id: user.id,
-          username: user.username,
-          fullName: user.fullName,
-          email: user.email,
-          role: user.role.name,
-        },
-      },
-    };
+ async login(loginDto: LoginDto) {
+  const user = await this.validateUser(loginDto.username, loginDto.password);
+  if (!user) {
+    throw new UnauthorizedException('Credenciales inválidas');
   }
+
+  // Actualizar último login
+  await this.userRepository.update(user.id, { lastLogin: new Date() });
+
+  // Asegúrate de que el payload tenga la estructura correcta
+  const payload = { 
+    sub: user.id, 
+    username: user.username, 
+    role: user.role?.name || 'user'
+  };
+
+  console.log('Generando token con payload:', payload); // Debug
+  console.log('JWT_SECRET:', process.env.JWT_SECRET); // Debug
+
+  const token = this.jwtService.sign(payload);
+  console.log('Token generado:', token); // Debug
+
+  return {
+    success: true,
+    message: 'Login exitoso',
+    data: {
+      access_token: token,
+      user: {
+        id: user.id,
+        username: user.username,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role?.name,
+      },
+    },
+  };
+}
 
   async register(registerDto: RegisterDto) {
     // Verificar si el usuario ya existe
