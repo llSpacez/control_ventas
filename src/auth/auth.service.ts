@@ -18,57 +18,68 @@ export class AuthService {
   ) {}
 
   async validateUser(username: string, password: string): Promise<any> {
+    console.log('Validando usuario:', username); // Debug
+    
     const user = await this.userRepository.findOne({
       where: { username, isActive: true },
-      relations: { role: true },
+      relations: {role: true},
     });
     
-    if (user && bcrypt.compareSync(password, user.password)) {
-      const { password, ...result } = user;
-      return result;
+    console.log('Usuario encontrado:', user ? 'Sí' : 'No');
+    
+    if (user) {
+      const passwordValid = bcrypt.compareSync(password, user.password);
+      console.log('Contraseña válida:', passwordValid);
+      
+      if (passwordValid) {
+        const { password, ...result } = user;
+        return result;
+      }
     }
     return null;
   }
 
- async login(loginDto: LoginDto) {
-  const user = await this.validateUser(loginDto.username, loginDto.password);
-  if (!user) {
-    throw new UnauthorizedException('Credenciales inválidas');
+  async login(loginDto: LoginDto) {
+    console.log('Login service llamado'); // Debug
+    
+    const user = await this.validateUser(loginDto.username, loginDto.password);
+    if (!user) {
+      throw new UnauthorizedException('Credenciales inválidas');
+    }
+
+    // Actualizar último login
+    await this.userRepository.update(user.id, { lastLogin: new Date() });
+
+    const payload = { 
+      sub: user.id, 
+      username: user.username, 
+      role: user.role?.name || 'user'
+    };
+    
+    console.log('Payload para token:', payload); // Debug
+
+    const token = this.jwtService.sign(payload);
+    console.log('Token generado'); // Debug
+
+    return {
+      success: true,
+      message: 'Login exitoso',
+      data: {
+        access_token: token,
+        user: {
+          id: user.id,
+          username: user.username,
+          fullName: user.fullName,
+          email: user.email,
+          role: user.role?.name,
+        },
+      },
+    };
   }
 
-  // Actualizar último login
-  await this.userRepository.update(user.id, { lastLogin: new Date() });
-
-  // Asegúrate de que el payload tenga la estructura correcta
-  const payload = { 
-    sub: user.id, 
-    username: user.username, 
-    role: user.role?.name || 'user'
-  };
-
-  console.log('Generando token con payload:', payload); // Debug
-  console.log('JWT_SECRET:', process.env.JWT_SECRET); // Debug
-
-  const token = this.jwtService.sign(payload);
-  console.log('Token generado:', token); // Debug
-
-  return {
-    success: true,
-    message: 'Login exitoso',
-    data: {
-      access_token: token,
-      user: {
-        id: user.id,
-        username: user.username,
-        fullName: user.fullName,
-        email: user.email,
-        role: user.role?.name,
-      },
-    },
-  };
-}
-
   async register(registerDto: RegisterDto) {
+    console.log('Register service llamado'); // Debug
+    
     // Verificar si el usuario ya existe
     const existingUser = await this.userRepository.findOne({
       where: [{ username: registerDto.username }, { email: registerDto.email }],
@@ -78,9 +89,10 @@ export class AuthService {
       throw new ConflictException('El usuario o email ya existe');
     }
 
-    // Verificar si el rol existe
+    // Verificar si el rol existe (por defecto rol de vendedor id=3)
+    let roleId = registerDto.roleId || 3;
     const role = await this.roleRepository.findOne({
-      where: { id: registerDto.roleId },
+      where: { id: roleId },
     });
 
     if (!role) {
@@ -91,11 +103,16 @@ export class AuthService {
     const hashedPassword = bcrypt.hashSync(registerDto.password, 10);
 
     const user = this.userRepository.create({
-      ...registerDto,
+      username: registerDto.username,
       password: hashedPassword,
+      email: registerDto.email,
+      fullName: registerDto.fullName,
+      roleId: roleId,
+      isActive: true,
     });
 
     const savedUser = await this.userRepository.save(user);
+    console.log('Usuario registrado:', savedUser.id); // Debug
     
     const { password, ...result } = savedUser;
     return {
@@ -108,17 +125,7 @@ export class AuthService {
   async getProfile(userId: number) {
     const user = await this.userRepository.findOne({
       where: { id: userId },
-      relations: { role: true },
-      select: {
-        id: true,
-        username: true,
-        email: true,
-        fullName: true,
-        isActive: true,
-        lastLogin: true,
-        createdAt: true,
-        role: true,
-      },
+      relations: {role: true},
     });
     
     if (!user) {

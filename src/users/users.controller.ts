@@ -1,32 +1,37 @@
 import { Controller, Get, Post, Body, Put, Param, Delete, Query, UseGuards } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { UsersService } from './users.service';
-import { User } from '../entities/user.entity';
-import { PaginationDto } from '../dto/pagination.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { ApiTags } from '@nestjs/swagger';
 
 @ApiTags('users')
+@ApiBearerAuth('JWT-auth')
 @Controller('users')
-@UseGuards(JwtAuthGuard, RolesGuard)
 export class UsersController {
   constructor(private usersService: UsersService) {}
 
   @Get()
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
-  async findAll(@Query() paginationDto: PaginationDto) {
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Obtener todos los usuarios' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'search', required: false, type: String })
+  @ApiResponse({ status: 200, description: 'Lista de usuarios' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  @ApiResponse({ status: 403, description: 'Acceso prohibido - se requiere rol admin' })
+  async findAll(@Query() paginationDto: any) {
     return this.usersService.findAll(paginationDto);
   }
 
-  @Get('roles')
-  @Roles('admin')
-  async getRoles() {
-    return this.usersService.getRoles();
-  }
-
   @Get(':id')
-  @Roles('admin')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Obtener usuario por ID' })
+  @ApiResponse({ status: 200, description: 'Usuario encontrado' })
+  @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
   async findOne(@Param('id') id: string) {
     const user = await this.usersService.findOne(+id);
     return {
@@ -36,8 +41,12 @@ export class UsersController {
   }
 
   @Post()
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
-  async create(@Body() createUserDto: Partial<User>) {
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Crear nuevo usuario' })
+  @ApiResponse({ status: 201, description: 'Usuario creado exitosamente' })
+  async create(@Body() createUserDto: any) {
     const user = await this.usersService.create(createUserDto);
     return {
       success: true,
@@ -47,8 +56,12 @@ export class UsersController {
   }
 
   @Put(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
-  async update(@Param('id') id: string, @Body() updateUserDto: Partial<User>) {
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Actualizar usuario' })
+  @ApiResponse({ status: 200, description: 'Usuario actualizado exitosamente' })
+  async update(@Param('id') id: string, @Body() updateUserDto: any) {
     const user = await this.usersService.update(+id, updateUserDto);
     return {
       success: true,
@@ -58,23 +71,16 @@ export class UsersController {
   }
 
   @Delete(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Eliminar usuario' })
+  @ApiResponse({ status: 200, description: 'Usuario eliminado exitosamente' })
   async remove(@Param('id') id: string) {
     await this.usersService.remove(+id);
     return {
       success: true,
       message: 'Usuario eliminado exitosamente',
-    };
-  }
-
-  @Put(':id/status')
-  @Roles('admin')
-  async updateStatus(@Param('id') id: string, @Body('isActive') isActive: boolean) {
-    const user = await this.usersService.updateStatus(+id, isActive);
-    return {
-      success: true,
-      message: `Usuario ${isActive ? 'activado' : 'desactivado'} exitosamente`,
-      data: user,
     };
   }
 }
