@@ -4,7 +4,6 @@ import { Repository, Like } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { User } from '../entities/user.entity';
 import { Role } from '../entities/role.entity';
-import { PaginationDto } from '../dto/pagination.dto';
 
 @Injectable()
 export class UsersService {
@@ -15,33 +14,56 @@ export class UsersService {
     private roleRepository: Repository<Role>,
   ) {}
 
-  async findAll(paginationDto: PaginationDto) {
-    const { page, limit, search, sortBy, sortOrder } = paginationDto;
+  async findAll(paginationDto: { page?: number; limit?: number; search?: string }) {
+    // Asegurar que los valores sean números
+    const page = Math.max(1, Number(paginationDto.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(paginationDto.limit) || 10));
     const skip = (page - 1) * limit;
+    const search = paginationDto.search || '';
 
-    const queryBuilder = this.userRepository.createQueryBuilder('user')
-      .leftJoinAndSelect('user.role', 'role')
-      .select(['user.id', 'user.username', 'user.email', 'user.fullName', 'user.isActive', 'user.lastLogin', 'user.createdAt', 'role']);
+    try {
+      const queryBuilder = this.userRepository.createQueryBuilder('user')
+        .leftJoinAndSelect('user.role', 'role')
+        .select([
+          'user.id',
+          'user.username',
+          'user.email',
+          'user.fullName',
+          'user.isActive',
+          'user.lastLogin',
+          'user.createdAt',
+          'role'
+        ]);
 
-    if (search) {
-      queryBuilder.where('user.username LIKE :search', { search: `%${search}%` })
-        .orWhere('user.email LIKE :search', { search: `%${search}%` })
-        .orWhere('user.fullName LIKE :search', { search: `%${search}%` });
+      if (search && search.trim() !== '') {
+        queryBuilder.where('user.username LIKE :search', { search: `%${search}%` })
+          .orWhere('user.email LIKE :search', { search: `%${search}%` })
+          .orWhere('user.fullName LIKE :search', { search: `%${search}%` });
+      }
+
+      const [data, total] = await queryBuilder
+        .orderBy('user.id', 'DESC')
+        .skip(skip)
+        .take(limit)
+        .getManyAndCount();
+
+      return {
+        data: data || [],
+        total: total || 0,
+        page,
+        limit,
+        totalPages: Math.ceil((total || 0) / limit),
+      };
+    } catch (error) {
+      console.error('Error en findAll:', error);
+      return {
+        data: [],
+        total: 0,
+        page,
+        limit,
+        totalPages: 0,
+      };
     }
-
-    queryBuilder.orderBy(`user.${sortBy}`, sortOrder)
-      .skip(skip)
-      .take(limit);
-
-    const [data, total] = await queryBuilder.getManyAndCount();
-
-    return {
-      success: true,
-      data,
-      total,
-      page,
-      totalPages: Math.ceil(total / limit),
-    };
   }
 
   async findOne(id: number): Promise<User> {
@@ -57,35 +79,51 @@ export class UsersService {
     return user;
   }
 
+  async findByUsername(username: string): Promise<User | null> {
+    return this.userRepository.findOne({
+      where: { username },
+      relations: {role: true},
+    });
+  }
+
   async create(userData: Partial<User>): Promise<User> {
-    // Verificar si ya existe
-    const existingUser = await this.userRepository.findOne({
-      where: [
-        { username: userData.username },
-        { email: userData.email },
-      ],
-    });
+    try {
+      // Verificar si ya existe
+      const existingUser = await this.userRepository.findOne({
+        where: [
+          { username: userData.username },
+          { email: userData.email },
+        ],
+      });
 
-    if (existingUser) {
-      throw new ConflictException('El nombre de usuario o email ya existe');
+      if (existingUser) {
+        throw new ConflictException('El nombre de usuario o email ya existe');
+      }
+
+      // Verificar rol
+      if (userData.roleId) {
+        const role = await this.roleRepository.findOne({
+          where: { id: userData.roleId },
+        });
+        if (!role) {
+          throw new NotFoundException('Rol no encontrado');
+        }
+      } else {
+        // Rol por defecto: vendedor (id: 3)
+        userData.roleId = 3;
+      }
+
+      // Encriptar contraseña
+      if (userData.password) {
+        userData.password = bcrypt.hashSync(userData.password, 10);
+      }
+
+      const user = this.userRepository.create(userData);
+      return await this.userRepository.save(user);
+    } catch (error) {
+      console.error('Error en create:', error);
+      throw error;
     }
-
-    // Verificar rol
-    const role = await this.roleRepository.findOne({
-      where: { id: userData.roleId },
-    });
-
-    if (!role) {
-      throw new NotFoundException('Rol no encontrado');
-    }
-
-    // Encriptar contraseña
-    if (userData.password) {
-      userData.password = bcrypt.hashSync(userData.password, 10);
-    }
-
-    const user = this.userRepository.create(userData);
-    return this.userRepository.save(user);
   }
 
   async update(id: number, userData: Partial<User>): Promise<User> {
@@ -107,7 +145,7 @@ export class UsersService {
     }
 
     Object.assign(user, userData);
-    return this.userRepository.save(user);
+    return await this.userRepository.save(user);
   }
 
   async remove(id: number): Promise<void> {
@@ -118,14 +156,10 @@ export class UsersService {
   async updateStatus(id: number, isActive: boolean): Promise<User> {
     const user = await this.findOne(id);
     user.isActive = isActive;
-    return this.userRepository.save(user);
+    return await this.userRepository.save(user);
   }
 
   async getRoles() {
-    const roles = await this.roleRepository.find();
-    return {
-      success: true,
-      data: roles,
-    };
+    return this.roleRepository.find();
   }
 }

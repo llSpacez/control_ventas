@@ -1,0 +1,47 @@
+# Compiled output
+/dist/
+/node_modules/
+/backups/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Database backups
+*.sql
+*.sqlite
+*.db
+
+# Runtime data
+pids
+*.pid
+*.seed
+
+# Coverage directory
+coverage/
+.nyc_output/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+*.pem
+*.key
+*.crt
+
+# Build tools
+tsconfig.build.tsbuildinfo
